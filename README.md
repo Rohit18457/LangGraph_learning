@@ -38,9 +38,9 @@ Illustrates dynamic path decisions using `add_conditional_edges`:
 flowchart TD
     START([START]) --> chatbot[chatbot Node\nFirst LLM Pass]
     chatbot --> evaluate{evaluate_response\nConditional Edge}
-    evaluate -- route: chatbot_gemini --> chatbot_gemini[chatbot_gemini Node\nRefinement Pass]
+    evaluate -- route: Groq_chatbot --> Groq_chatbot[Groq_chatbot Node\nRefinement Pass]
     evaluate -- route: endnode --> endnode[endnode Node\nFinalize State]
-    chatbot_gemini --> endnode
+    Groq_chatbot --> endnode
     endnode --> END([END])
 ```
 

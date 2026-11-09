@@ -42,18 +42,18 @@ def chatbot(state: State):
     return state
 
 
-def evaluate_response(state: State) -> Literal["chatbot_gemini", "endnode"]:
+def evaluate_response(state: State) -> Literal["Groq_chatbot", "endnode"]:
     """Conditional Edge function: Decides next node based on state conditions."""
     print("⚖️  [evaluate_response] Routing decision...")
     # Branching logic: routes to alternative model or finishes
     if False:
         return "endnode"
-    return "chatbot_gemini"
+    return "Groq_chatbot"
 
 
-def chatbot_gemini(state: State):
-    """Alternative / Refinement LLM Node: Triggered conditionally."""
-    print("✨ [chatbot_gemini Node] Refining response...")
+def Groq_chatbot(state: State):
+    """Groq Chatbot Node: Triggered conditionally."""
+    print("✨ [Groq_chatbot Node] Refining response...")
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[
@@ -74,12 +74,12 @@ def endnode(state: State):
 graph_builder = StateGraph(State)
 
 graph_builder.add_node("chatbot", chatbot)
-graph_builder.add_node("chatbot_gemini", chatbot_gemini)
+graph_builder.add_node("Groq_chatbot", Groq_chatbot)
 graph_builder.add_node("endnode", endnode)
 
 graph_builder.add_edge(START, "chatbot")
 graph_builder.add_conditional_edges("chatbot", evaluate_response)
-graph_builder.add_edge("chatbot_gemini", "endnode")
+graph_builder.add_edge("Groq_chatbot", "endnode")
 graph_builder.add_edge("endnode", END)
 
 
