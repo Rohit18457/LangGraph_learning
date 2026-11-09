@@ -1,77 +1,75 @@
 """
-Example 2: Conditional Edges & Dynamic Branching with State Checkpointing in LangGraph
+Example 2: Conditional Edges & Multi-Turn Chatbot with State Checkpointing in LangGraph
 Demonstrates:
-- Custom state schema using TypedDict with optional fields
-- Using Groq client directly inside graph nodes
-- Implementing conditional edges with `add_conditional_edges` and `Literal` return types
-- Dynamically routing between alternative nodes or skipping to end
+- Message history persistence using `Annotated[list, add_messages]` reducer
+- Conditional edges with `add_conditional_edges` and `Literal` routing
 - Checkpointing graph state with MongoDB (or falling back to MemorySaver)
+- Interactive multi-turn conversation loop that remembers context across turns
 """
 import os
-from typing import Optional, Literal
+from typing import Annotated, Optional, Literal
 from dotenv import load_dotenv
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.mongodb import MongoDBSaver
+from langchain.chat_models import init_chat_model
+from langchain_core.messages import HumanMessage
 from pymongo import MongoClient
-from groq import Groq
 
 load_dotenv()
 
-client = Groq()
 MODEL_NAME = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+
+# Initialize Chat Model with Groq (capping max_tokens to prevent OTPM rate limits)
+llm = init_chat_model(
+    model=MODEL_NAME,
+    model_provider="groq",
+    max_tokens=300
+)
 
 
 class State(TypedDict):
-    user_query: str
-    llm_output: Optional[str]
+    # `add_messages` ensures all user and AI turns are preserved in sequence
+    messages: Annotated[list, add_messages]
     is_good: Optional[bool]
 
 
 def chatbot(state: State):
-    """First LLM Node: Generates initial response to user query."""
+    """First LLM Node: Generates response using full conversation history."""
     print("🤖 [chatbot Node] Generating response...")
     try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "user", "content": state.get("user_query")}
-            ],
-            max_tokens=300
-        )
-        state["llm_output"] = response.choices[0].message.content
-        state["is_good"] = True
+        response = llm.invoke(state["messages"])
+        return {
+            "messages": [response],
+            "is_good": True
+        }
     except Exception as e:
-        state["llm_output"] = f"⚠️ Groq API Error: {e}"
-        state["is_good"] = False
-    return state
+        print(f"⚠️ Chatbot Error: {e}")
+        return {
+            "messages": [{"role": "assistant", "content": f"⚠️ Error generating response: {e}"}],
+            "is_good": False
+        }
 
 
 def evaluate_response(state: State) -> Literal["Groq_chatbot", "endnode"]:
     """Conditional Edge function: Decides next node based on state conditions."""
     print("⚖️  [evaluate_response] Routing decision...")
-    # If the response was successful, finish directly. Only refine if failed or flag is False.
+    # If the response was successful, finish directly. Refine only if failed.
     if state.get("is_good"):
         return "endnode"
     return "Groq_chatbot"
 
 
 def Groq_chatbot(state: State):
-    """Groq Chatbot Node: Triggered conditionally to refine or retry."""
+    """Fallback / Refinement LLM Node: Triggered conditionally if primary node needed retry."""
     print("✨ [Groq_chatbot Node] Refining response...")
     try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "user", "content": state.get("user_query")}
-            ],
-            max_tokens=300
-        )
-        state["llm_output"] = response.choices[0].message.content
+        response = llm.invoke(state["messages"])
+        return {"messages": [response]}
     except Exception as e:
-        state["llm_output"] = f"⚠️ Groq API Error: {e}"
-    return state
+        return {"messages": [{"role": "assistant", "content": f"⚠️ Refinement Error: {e}"}]}
 
 
 def endnode(state: State):
@@ -114,16 +112,16 @@ def get_checkpointer():
 checkpointer = get_checkpointer()
 graph_with_checkpointer = graph_builder.compile(checkpointer=checkpointer)
 
-# Configuration with proper thread_id for state isolation
+# Configuration with thread_id for conversation state isolation
 config = {
     "configurable": {
-        "thread_id": "Rohit"
+        "thread_id": "user_session_rohit"
     }
 }
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🚀 LangGraph Interactive Chatbot")
+    print("🚀 LangGraph Interactive Multi-Turn Chatbot (with Memory)")
     print("Type your query below. Type 'exit' or 'q' to quit.")
     print("=" * 60)
 
@@ -141,12 +139,13 @@ if __name__ == "__main__":
             print("Goodbye!")
             break
 
-        current_input = State({
-            "user_query": user_input,
-            "llm_output": None,
-            "is_good": None
-        })
+        current_input = {
+            "messages": [HumanMessage(content=user_input)]
+        }
 
         updated_state = graph_with_checkpointer.invoke(current_input, config=config)
 
-        print(f"\nAI > {updated_state.get('llm_output')}")
+        # Get the latest assistant response
+        latest_message = updated_state["messages"][-1]
+        content = getattr(latest_message, "content", latest_message)
+        print(f"\nAI > {content}")
