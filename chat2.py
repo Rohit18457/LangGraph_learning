@@ -32,35 +32,45 @@ class State(TypedDict):
 def chatbot(state: State):
     """First LLM Node: Generates initial response to user query."""
     print("🤖 [chatbot Node] Generating response...")
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[
-            {"role": "user", "content": state.get("user_query")}
-        ]
-    )
-    state["llm_output"] = response.choices[0].message.content
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "user", "content": state.get("user_query")}
+            ],
+            max_tokens=300
+        )
+        state["llm_output"] = response.choices[0].message.content
+        state["is_good"] = True
+    except Exception as e:
+        state["llm_output"] = f"⚠️ Groq API Error: {e}"
+        state["is_good"] = False
     return state
 
 
 def evaluate_response(state: State) -> Literal["Groq_chatbot", "endnode"]:
     """Conditional Edge function: Decides next node based on state conditions."""
     print("⚖️  [evaluate_response] Routing decision...")
-    # Branching logic: routes to alternative model or finishes
-    if False:
+    # If the response was successful, finish directly. Only refine if failed or flag is False.
+    if state.get("is_good"):
         return "endnode"
     return "Groq_chatbot"
 
 
 def Groq_chatbot(state: State):
-    """Groq Chatbot Node: Triggered conditionally."""
+    """Groq Chatbot Node: Triggered conditionally to refine or retry."""
     print("✨ [Groq_chatbot Node] Refining response...")
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[
-            {"role": "user", "content": state.get("user_query")}
-        ]
-    )
-    state["llm_output"] = response.choices[0].message.content
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "user", "content": state.get("user_query")}
+            ],
+            max_tokens=300
+        )
+        state["llm_output"] = response.choices[0].message.content
+    except Exception as e:
+        state["llm_output"] = f"⚠️ Groq API Error: {e}"
     return state
 
 
