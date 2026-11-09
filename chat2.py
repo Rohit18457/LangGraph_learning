@@ -113,17 +113,30 @@ config = {
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🚀 Running LangGraph Conditional Branching Pipeline")
+    print("🚀 LangGraph Interactive Chatbot")
+    print("Type your query below. Type 'exit' or 'q' to quit.")
     print("=" * 60)
 
-    initial_input = State({
-        "user_query": "My name is Rohit Suryawanshi. Calculate 3 + 3 for me.",
-        "llm_output": None,
-        "is_good": None
-    })
+    while True:
+        try:
+            user_input = input("\nYou > ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nGoodbye!")
+            break
 
-    updated_state = graph_with_checkpointer.invoke(initial_input, config=config)
+        if not user_input:
+            continue
 
-    print("\nUpdated Result:")
-    print("Query :", updated_state.get("user_query"))
-    print("Answer:", updated_state.get("llm_output"))
+        if user_input.lower() in ("exit", "quit", "q"):
+            print("Goodbye!")
+            break
+
+        current_input = State({
+            "user_query": user_input,
+            "llm_output": None,
+            "is_good": None
+        })
+
+        updated_state = graph_with_checkpointer.invoke(current_input, config=config)
+
+        print(f"\nAI > {updated_state.get('llm_output')}")
