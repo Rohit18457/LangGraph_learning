@@ -72,3 +72,4 @@ if __name__ == "__main__":
     turn2_input = State({"messages": ["What is my name?"]})
     for chunk in graph_with_checkpointer.stream(turn2_input, config, stream_mode="values"):
         chunk["messages"][-1].pretty_print()
+
